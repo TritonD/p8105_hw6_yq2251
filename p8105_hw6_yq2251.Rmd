@@ -1,0 +1,181 @@
+---
+title: "p8105_hw6_yq2251"
+author: "TritonD"
+date: "11/23/2019"
+output: github_document
+---
+
+```{r}
+library(tidyverse)
+library(modelr)
+library(mgcv)
+```
+
+# Question 1 Baby birthweight model
+```{r}
+birthw=read_csv('./data/birthweight.csv')
+```
+
+```{r}
+bw_tidy=
+birthw%>%
+  mutate(
+  babysex=as.factor(babysex),
+  babysex=recode(babysex,"1"="male", "2"="female"),
+  frace=as.factor(frace),
+  frace=recode(frace,"1"="white", "2"="black","3"="asian", "4"="puerto rican", "8"="other","9"="unknown"),
+  malform=as.factor(malform),
+  malform=recode(malform,"1"="present", "0"="absent"),
+  mrace=as.factor(mrace),
+  mrace=recode(mrace, "1"="white", "2"="black","3"="asian", "4"="puerto rican", "8"="other"))
+```
+
+
+```{r}
+#check if there is missing value
+anyNA(bw_tidy)
+```
+All results are false, there is no missing value
+
+```{r}
+#The general model with all predictors included will be
+general_x = lm(bwt ~ ., data = bw_tidy)
+summary(general_x)
+```
+There are 3 variables excluded from the model due to singularities: pnumlbw, pnumsga, wtgain
+
+```{r}
+#general model with 3 variables excluded:
+Model1 = update(general_x, . ~ . -pnumlbw -pnumsga -wtgain)
+summary(Model1)
+```
+The variable "frace" has "fraceother" with highest p-value 0.953745 (least significant) and other fraces' p value all not significant, we will eliminate it from model.
+
+```{r}
+#Model 1 with 1 extra variable excluded:
+Model2 = update(Model1, . ~ . -frace)
+summary(Model2)
+```
+The variable "malformpresent" has highest p-value 0.888937 (least significant) and we will eliminate it from model.
+
+```{r}
+#Model 2 with 1 extra variable excluded:
+Model3 = update(Model2, . ~ . -malform)
+summary(Model3)
+```
+The variable "malform" has highest p-value 0.888937 (least significant) and we will eliminate it from model.
+
+```{r}
+#Model 3 with 1 extra variable excluded:
+Model4 = update(Model3, . ~ . -malform)
+summary(Model4)
+```
+The variable "ppbmi" has highest p-value 0.759922 (least significant) and we will eliminate it from model.
+
+```{r}
+#Model 4 with 1 extra variable excluded:
+Model5 = update(Model4, . ~ . -ppbmi)
+summary(Model5)
+```
+The variable "momage" has highest p-value 0.530319 (least significant) and we will eliminate it from model.
+
+```{r}
+#Model 5 with 1 extra variable excluded:
+Model6 = update(Model5, . ~ . -momage)
+summary(Model6)
+```
+The variable "menarche" has highest p-value 0.245327 (least significant) and we will eliminate it from model.
+
+```{r}
+#Model 6 with 1 extra variable excluded:
+Model7 = update(Model6, . ~ . -menarche)
+summary(Model7)
+```
+The variable "fincome" has highest p-value 0.068844 (least significant) and we will eliminate it from model.
+
+```{r}
+#Model 7 with 1 extra variable excluded:
+Model8 = update(Model7, . ~ . -fincome)
+summary(Model8)
+```
+Although "mracesuan" has insignificant p-value, but the other two mrace categories are significant, thus I will keep this variable in the final model.
+
+
+```{r}
+final_model = lm(bwt ~ babysex + bhead + blength + delwt + gaweeks + mheight + parity + ppwt + smoken + mrace, data = bw_tidy)
+
+#show my final model's variable estimates in a table
+final_model %>% 
+  broom::tidy() %>% 
+  knitr::kable()
+final_model %>% 
+  broom::glance()
+```
+The R-squared value is 0.718 for my model, which indicates 71.8% of the variance can be explained by this final model.
+
+# Visualize my model 
+```{r}
+bw_tidy %>% 
+modelr::add_residuals(final_model) %>% 
+modelr::add_predictions(final_model) %>% 
+  ggplot(aes(x = pred, y = resid)) + 
+  geom_point()+
+  geom_hline(yintercept = 0, color = "red") +
+  labs(
+    title = 'Model predictted values against residuals',
+    x = 'Predicted values',
+    y = 'Residuals'
+  )
+```
+
+
+Build example Model 1
+```{r}
+Exp_M1 = lm(bwt ~ blength + gaweeks, data = bw_tidy)
+Exp_M1 %>% 
+  broom::tidy()
+```
+
+
+Build example Model 2
+```{r}
+Exp_M2 = lm(bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + bhead*blength+babysex*bhead*blength, data = bw_tidy)
+Exp_M2 %>% 
+  broom::tidy()
+```
+
+Cross validation
+```{r}
+cv_df = 
+  crossv_mc(bw_tidy, 100) %>%
+   mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+```
+
+```{r}
+cv_df = 
+  cv_df %>% 
+  
+  mutate(final_model = map(train, ~lm(bwt ~ babysex + bhead + blength + delwt + gaweeks + mheight + parity + ppwt + smoken + mrace, data = .x)),
+         Exp_M1= map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+         Exp_M2= map(train, ~lm(bwt ~ babysex + bhead + blength + babysex*bhead + babysex*blength + bhead*blength+babysex*bhead*blength, data=.x))) %>% 
+  
+  mutate(rmse_final_model = map2_dbl(final_model, test, ~rmse(model = .x, data = .y)),
+         rmse_Exp_M1= map2_dbl(Exp_M1, test, ~rmse(model = .x, data = .y)),
+         rmse_Exp_M2 = map2_dbl(Exp_M2, test, ~rmse(model = .x, data = .y)))
+```
+
+shows the distribution of RMSE values for each candidate model
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+According to violin plot, my final model fits the data best with least error.
