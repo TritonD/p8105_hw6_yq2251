@@ -144,7 +144,7 @@ Exp_M2 %>%
   broom::tidy()
 ```
 
-Cross validation
+#Cross validation
 ```{r}
 cv_df = 
   crossv_mc(bw_tidy, 100) %>%
@@ -179,3 +179,77 @@ pivot_longer(
   ggplot(aes(x = model, y = rmse)) + geom_violin()
 ```
 According to violin plot, my final model fits the data best with least error.
+
+
+
+# Question 2
+Load the data
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+
+```{r}
+bootstraps_weather=
+weather_df %>% 
+  modelr::bootstrap(n = 5000) %>% 
+  mutate(
+    models = map(strap, ~lm(tmax ~ tmin, data = .x) ),
+    results = map(models, broom::tidy),
+    glance = map(models, broom::glance)) %>% 
+  select(-models, -strap) %>% 
+  unnest(results,glance)%>%
+  janitor::clean_names()
+```
+
+
+```{r}
+weather_r2 = 
+  bootstraps_weather %>% 
+  select(id, r_squared)
+quantile(weather_r2$r_squared, 0.025)
+quantile(weather_r2$r_squared, 0.975)
+```
+The 95% confidence interval for R-squared is (0.894, 0.927).
+
+
+```{r}
+weather_betas = 
+ bootstraps_weather %>% 
+  group_by(id) %>% 
+  summarize(
+    boot_betas = log(estimate[[1]]*estimate[[2]])
+  )
+quantile(weather_betas$boot_betas, 0.025)
+quantile(weather_betas$boot_betas, 0.975)
+```
+The 95% confidence interval for log(beta0*beta1) is (1.965, 2.061).
+
+
+# Plot estimated distributions
+```{r}
+weather_r2 %>% 
+  ggplot(aes(x = r_squared)) +
+  geom_density()+
+  ggtitle("Distribution of R-squared")
+```
+R-squared has a slightly left-skewed distribution
+
+
+```{r}
+weather_betas %>% 
+  ggplot(aes(x = boot_betas)) +
+  geom_density()+
+  ggtitle("Distribution of log(beta0*beta1)")
+```
+log(beta0*beta1) has a aproximately normal distribution
