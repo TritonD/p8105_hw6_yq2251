@@ -127,9 +127,9 @@ modelr::add_predictions(final_model) %>%
     y = 'Residuals'
   )
 ```
+Most of the predicted values are ranging 2000-4000, slightly left skewed with few outlines. The residuals ranging 1000- (-1000).Red line was shown at y intercept=0
 
-
-Build example Model 1
+Build example Model 
 ```{r}
 Exp_M1 = lm(bwt ~ blength + gaweeks, data = bw_tidy)
 Exp_M1 %>% 
